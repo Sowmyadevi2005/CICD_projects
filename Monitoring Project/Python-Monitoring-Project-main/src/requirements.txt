@@ -1,0 +1,13 @@
+Flask==1.1.2                  # Stable and widely used, works with Python 3.12
+jinja2<3.1                    # Avoids import error with 'escape'
+itsdangerous<2.1             # Prevents JSON import error with Flask 1.x
+Werkzeug<2.1                 # Ensures compatibility with Flask 1.x
+
+py-cpuinfo==9.0.0            # System info
+psutil==5.9.8                # CPU/mem stats for monitoring
+gunicorn==21.2.0             # For production deployment
+
+black==24.3.0                # Code formatter
+flake8==7.0.0                # Linter
+pytest==8.1.1                # Unit test framework
+
