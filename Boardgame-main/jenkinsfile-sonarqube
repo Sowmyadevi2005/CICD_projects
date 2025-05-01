@@ -1,0 +1,65 @@
+pipeline {
+    agent { label 'Agent-1' }
+    tools { maven 'maven3.8'}
+    environment{
+        SCANNER_HOME = tool'sonar-scanner'
+        
+    }
+    stages {
+        stage('GitHub Checkout') {
+            steps {
+                git branch: 'dev', 
+                    url: 'https://github.com/Sowmyadevi2005/CICD_projects.git'
+            }
+        }
+        stage('Compile'){
+            steps{
+                dir('Boardgame-main/') {
+                        sh'''mvn compile'''
+                            }
+            }
+        }
+        stage('Test'){
+            steps{
+                dir('Boardgame-main/') {
+                        sh'''mvn test'''
+                            }
+            }
+        }
+        stage('Package'){
+            steps{
+                dir('Boardgame-main/') {
+                        sh'''mvn package'''
+                            }
+            }
+        }
+        stage('Sonar Scan Analysis') {
+            steps {
+                dir('Boardgame-main') {
+                    withSonarQubeEnv('sonarqube') {
+                        sh '''
+                            ${SCANNER_HOME}/bin/sonar-scanner \
+                              -Dsonar.projectKey=Boardgame \
+                              -Dsonar.projectName=Boardgame \
+                              -Dsonar.java.binaries=target
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Sonar Quality Gate Check') {
+            steps {
+                timeout(time: 15, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: false
+                }
+            }
+        }
+    
+    }
+    post{
+        always{
+            cleanWs()
+        }
+    }
+}
