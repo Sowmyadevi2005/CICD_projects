@@ -1,4 +1,4 @@
-pipeline {
+pipeline { 
     agent { label 'Agent-1' }
     tools { maven 'maven3.8'}
     environment{
