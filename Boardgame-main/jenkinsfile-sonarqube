@@ -3,7 +3,6 @@ pipeline {
     tools { maven 'maven3.8'}
     environment{
         SCANNER_HOME = tool'sonar-scanner'
-         
     }
     stages {
         stage('GitHub Checkout') {
