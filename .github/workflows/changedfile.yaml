@@ -22,22 +22,19 @@ jobs:
           echo "Ref:   ${{ github.ref }}"
           echo "SHA:   ${{ github.sha }}"
 
-      # CHANGED STEP STARTS HERE
       - name: Compute changed files (push or PR)
         id: changed
-        shell: bash          # <- added to ensure bash is used
+        shell: bash
         run: |
           set -euo pipefail
 
           if [ "${{ github.event_name }}" = "push" ]; then
-            # For push: diff between previous and current commit on THIS branch
             BEFORE="${{ github.event.before }}"
             AFTER="${{ github.event.after }}"
             echo "Push event: comparing $BEFORE..$AFTER"
             files=$(git diff --name-only --diff-filter=ACMRT "$BEFORE" "$AFTER")
 
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            # For PR: diff between base and head of the PR
             BASE_SHA="${{ github.event.pull_request.base.sha }}"
             HEAD_SHA="${{ github.event.pull_request.head.sha }}"
             echo "PR event: comparing $BASE_SHA..$HEAD_SHA"
@@ -49,18 +46,24 @@ jobs:
             files=""
           fi
 
-          echo "Changed files:"
+          echo "Changed files (log):"
           printf '%s\n' "$files"
 
-          # Build JSON array safely
-          json=$(printf '%s\n' "$files" | jq -R . | jq -s .)
+          # Write all paths to a file in the workspace
+          printf '%s\n' "$files" > changed_files.txt
 
-          # IMPORTANT: this must be exactly key=value, no extra quotes or spaces
-          echo "files=$json" >> "$GITHUB_OUTPUT"
-      # CHANGED STEP ENDS HERE
+          echo "Wrote changed file paths to $(pwd)/changed_files.txt"
 
-      - name: List files one per line (from output)
+      - name: Use changed_files.txt (example extraction)
+        shell: bash
         run: |
-          echo 'Files JSON: ${{ steps.changed.outputs.files }}'
-          echo 'Files list:'
-          printf '%s\n' "${{ steps.changed.outputs.files }}" | jq -r '.[]'
+          echo "Contents of changed_files.txt:"
+          cat changed_files.txt
+
+          echo
+          echo "Only .yaml files:"
+          grep '\.yaml$' changed_files.txt || echo "No .yaml files found"
+
+          echo
+          echo "Only files under src/:"
+          grep '^src/' changed_files.txt || echo "No src/ files found"
