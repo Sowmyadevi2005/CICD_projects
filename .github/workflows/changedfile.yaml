@@ -1,0 +1,61 @@
+name: Show changed files for current branch
+
+on:
+  push:
+    branches: [ f1 ]   # later change this to [ main ]
+  pull_request:
+    branches: [ f1 ]   # later change this to [ main ]
+
+jobs:
+  changed-files:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout with history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Show event info
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref:   ${{ github.ref }}"
+          echo "SHA:   ${{ github.sha }}"
+
+      - name: Compute changed files (push or PR)
+        id: changed
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # For push: diff between previous and current commit on THIS branch
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.event.after }}"
+            echo "Push event: comparing $BEFORE..$AFTER"
+            files=$(git diff --name-only --diff-filter=ACMRT "$BEFORE" "$AFTER")
+
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            # For PR: diff between base and head of the PR
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+            echo "PR event: comparing $BASE_SHA..$HEAD_SHA"
+            git fetch origin "$BASE_SHA" "$HEAD_SHA" || true
+            files=$(git diff --name-only --diff-filter=ACMRT "$BASE_SHA" "$HEAD_SHA")
+
+          else
+            echo "Unsupported event: ${{ github.event_name }}"
+            files=""
+          fi
+
+          echo "Changed files:"
+          echo "$files"
+
+          # Optional: output as JSON array (for matrix use later)
+          json=$(printf '%s\n' "$files" | jq -R . | jq -s .)
+          echo "files=$json" >> "$GITHUB_OUTPUT"
+
+      - name: List files one per line (from output)
+        run: |
+          echo 'Files JSON: ${{ steps.changed.outputs.files }}'
+          echo 'Files list:'
+          printf '%s\n' "${{ steps.changed.outputs.files }}" | jq -r '.[]'
