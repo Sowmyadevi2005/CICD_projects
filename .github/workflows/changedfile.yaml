@@ -1,10 +1,10 @@
-name: Show changed files for current branch
+name: Changed .csproj discovery
 
 on:
   push:
-    branches: [ f1 ]   # later change this to [ main ]
+    branches: [ f1 ]      # later change to [ main ]
   pull_request:
-    branches: [ f1 ]   # later change this to [ main ]
+    branches: [ f1 ]
 
 jobs:
   changed-files:
@@ -15,12 +15,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Show event info
-        run: |
-          echo "Event: ${{ github.event_name }}"
-          echo "Ref:   ${{ github.ref }}"
-          echo "SHA:   ${{ github.sha }}"
 
       - name: Compute changed files (push or PR)
         id: changed
@@ -33,37 +27,89 @@ jobs:
             AFTER="${{ github.event.after }}"
             echo "Push event: comparing $BEFORE..$AFTER"
             files=$(git diff --name-only --diff-filter=ACMRT "$BEFORE" "$AFTER")
-
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE_SHA="${{ github.event.pull_request.base.sha }}"
             HEAD_SHA="${{ github.event.pull_request.head.sha }}"
             echo "PR event: comparing $BASE_SHA..$HEAD_SHA"
             git fetch origin "$BASE_SHA" "$HEAD_SHA" || true
             files=$(git diff --name-only --diff-filter=ACMRT "$BASE_SHA" "$HEAD_SHA")
-
           else
             echo "Unsupported event: ${{ github.event_name }}"
             files=""
           fi
 
-          echo "Changed files (log):"
+          echo "Changed files:"
           printf '%s\n' "$files"
 
-          # Write all paths to a file in the workspace
+          # Store changed paths in a repo file
           printf '%s\n' "$files" > changed_files.txt
+          echo "Changed file paths written to $(pwd)/changed_files.txt"
 
-          echo "Wrote changed file paths to $(pwd)/changed_files.txt"
-
-      - name: Use changed_files.txt (example extraction)
+      - name: Find nearest .csproj for each changed file
         shell: bash
         run: |
-          echo "Contents of changed_files.txt:"
-          cat changed_files.txt
+          set -euo pipefail
 
-          echo
-          echo "Only .yaml files:"
-          grep '\.yaml$' changed_files.txt || echo "No .yaml files found"
+          # Start from the repo root
+          cd "${{ github.workspace }}"
 
-          echo
-          echo "Only files under src/:"
-          grep '^src/' changed_files.txt || echo "No src/ files found"
+          if [ ! -s changed_files.txt ]; then
+            echo "No changed files detected; nothing to search."
+            exit 0
+          fi
+
+          : > cs_proj_paths.txt   # truncate/create
+
+          find_csproj_up() {
+            local path="$1"
+            local dir
+            dir=$(dirname "$path")
+
+            # Walk upwards until repo root
+            while true; do
+              # Check for any .csproj in this directory
+              matches=()
+              # Use glob, but suppress literal *.csproj when none
+              while IFS= read -r f; do
+                matches+=("$f")
+              done < <(find "$dir" -maxdepth 1 -mindepth 1 -name '*.csproj' -printf '%P\n')
+
+              if [ "${#matches[@]}" -gt 0 ]; then
+                # Choose first match (or adapt if multiple)
+                echo "${dir}/${matches[0]}"
+                return 0
+              fi
+
+              # If we are at repo root, stop
+              if [ "$dir" = "." ] || [ "$dir" = "/" ]; then
+                break
+              fi
+
+              dir=$(dirname "$dir")
+            done
+
+            return 1
+          }
+
+          # For each changed file, try to find closest .csproj upward
+          missing=0
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            echo "Processing changed file: $file"
+
+            if csproj_path=$(find_csproj_up "$file"); then
+              echo "  Found .csproj: $csproj_path"
+              echo "$csproj_path" >> cs_proj_paths.txt
+            else
+              echo "  ERROR: No .csproj found for $file when walking up directories."
+              missing=1
+            fi
+          done < changed_files.txt
+
+          if [ "$missing" -ne 0 ]; then
+            echo "At least one changed file has no corresponding .csproj. Failing pipeline."
+            exit 1
+          fi
+
+          echo "All found .csproj paths:"
+          sort -u cs_proj_paths.txt || true
