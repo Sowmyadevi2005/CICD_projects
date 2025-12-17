@@ -10,14 +10,16 @@ HEAD_SHA="${5:-}"
 files=""
 
 if [ "$EVENT_NAME" = "push" ]; then
-  echo "Push event: comparing $BEFORE..$AFTER"
+  # log to stderr
+  >&2 echo "Push event: comparing $BEFORE..$AFTER"
   files=$(git diff --name-only --diff-filter=ACMRT "$BEFORE" "$AFTER")
 elif [ "$EVENT_NAME" = "pull_request" ]; then
-  echo "PR event: comparing $BASE_SHA..$HEAD_SHA"
+  >&2 echo "PR event: comparing $BASE_SHA..$HEAD_SHA"
   git fetch origin "$BASE_SHA" "$HEAD_SHA" || true
   files=$(git diff --name-only --diff-filter=ACMRT "$BASE_SHA" "$HEAD_SHA")
 else
-  echo "Unsupported event: $EVENT_NAME"
+  >&2 echo "Unsupported event: $EVENT_NAME"
 fi
 
+# IMPORTANT: only paths to stdout
 printf '%s\n' "$files"
