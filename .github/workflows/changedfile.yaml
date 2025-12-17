@@ -22,8 +22,10 @@ jobs:
           echo "Ref:   ${{ github.ref }}"
           echo "SHA:   ${{ github.sha }}"
 
+      # CHANGED STEP STARTS HERE
       - name: Compute changed files (push or PR)
         id: changed
+        shell: bash          # <- added to ensure bash is used
         run: |
           set -euo pipefail
 
@@ -48,11 +50,14 @@ jobs:
           fi
 
           echo "Changed files:"
-          echo "$files"
+          printf '%s\n' "$files"
 
-          # Optional: output as JSON array (for matrix use later)
+          # Build JSON array safely
           json=$(printf '%s\n' "$files" | jq -R . | jq -s .)
+
+          # IMPORTANT: this must be exactly key=value, no extra quotes or spaces
           echo "files=$json" >> "$GITHUB_OUTPUT"
+      # CHANGED STEP ENDS HERE
 
       - name: List files one per line (from output)
         run: |
